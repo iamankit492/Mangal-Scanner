@@ -31,88 +31,59 @@ const ExtractedTextScreen: React.FC = () => {
 
     try {
       setIsExportingEnglish(true);
-      
-      // Target external path for final PDF storage
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `extracted_text_${timestamp}.pdf`;
       const downloadsPath = getDownloadsFolderPath();
-      
-      try {
-        // Check if Scanner directory exists
-        const exists = await RNFS.exists(downloadsPath);
-        
-        if (!exists) {
-          // Create Scanner directory if it doesn't exist
-          await RNFS.mkdir(downloadsPath);
-          console.log(`Created directory: ${downloadsPath}`);
-        }
-      } catch (dirError) {
-        console.error('Error checking/creating directory:', dirError);
-        // Continue anyway as we'll attempt the file operation
+      const filePath = `${downloadsPath}/${fileName}`;
+
+      // Check if directory exists, if not create it
+      const dirExists = await RNFS.exists(downloadsPath);
+      if (!dirExists) {
+        await RNFS.mkdir(downloadsPath);
       }
-      
-      // Create a PDF from the extracted text
-      const timestamp = Date.now();
-      const fileName = `Extracted_Text_${timestamp}`;
-      
-      // Create HTML content for PDF
+
       const htmlContent = `
-        <!DOCTYPE html>
         <html>
           <head>
-            <meta charset="utf-8">
-            <title>Extracted Text</title>
+            <meta charset="UTF-8">
             <style>
-              body { font-family: Arial, sans-serif; margin: 20px; }
-              h1 { color: #333; font-size: 24px; }
-              p { line-height: 1.5; font-size: 14px; }
-              .timestamp { color: #666; font-size: 12px; margin-top: 20px; }
+              body {
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+                margin: 40px;
+                text-align: justify;
+              }
+              .content {
+                text-align: center;
+                margin-bottom: 20px;
+              }
+              .text {
+                text-align: justify;
+                margin-top: 20px;
+              }
             </style>
           </head>
           <body>
-            <h1>Extracted Text</h1>
-            <p>${extractedText.replace(/\n/g, '<br/>')}</p>
-            <p class="timestamp">Generated on: ${new Date().toLocaleString()}</p>
+            <div class="content">
+              <div class="text">${extractedText}</div>
+            </div>
           </body>
         </html>
       `;
-      
-      // Step 1: Generate PDF file in the app's private directory
+
       const options = {
         html: htmlContent,
         fileName: fileName,
-        // Don't specify directory to use default app directory
-        width: 595, // A4 width in points
-        height: 842, // A4 height in points
+        directory: 'Documents',
       };
-      
-      const pdf = await RNHTMLtoPDF.convert(options);
-      
-      if (pdf && pdf.filePath) {
-        console.log(`Temporary PDF created at: ${pdf.filePath}`);
-        
-        // Step 2: Copy the file to the external non-scoped location
-        const targetPath = `${downloadsPath}/${fileName}.pdf`;
-        
-        // Copy the file from app directory to external directory
-        await RNFS.copyFile(pdf.filePath, targetPath);
-        console.log(`PDF copied to external location: ${targetPath}`);
-        
-        // Optional: Delete the original file to clean up
-        await RNFS.unlink(pdf.filePath).catch(e => 
-          console.log('Error deleting temporary file:', e)
-        );
-        
-        // Show success message with the external path
-        Alert.alert(
-          'PDF Exported',
-          `PDF has been saved to:\n${targetPath}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        throw new Error('Failed to generate PDF');
-      }
+
+      const file = await RNHTMLtoPDF.convert(options);
+      await RNFS.moveFile(file.filePath, filePath);
+      Alert.alert('Success', `PDF saved to Scanner/${fileName}`);
     } catch (error) {
       console.error('Error exporting PDF:', error);
-      Alert.alert('Error', 'Failed to export PDF. Please check storage permissions and try again.');
+      Alert.alert('Error', 'Failed to export PDF');
     } finally {
       setIsExportingEnglish(false);
     }
@@ -127,142 +98,84 @@ const ExtractedTextScreen: React.FC = () => {
 
     try {
       setIsExportingHindi(true);
-      
-      // Target external path for final PDF storage
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `extracted_text_hindi_${timestamp}.pdf`;
       const downloadsPath = getDownloadsFolderPath();
-      
-      try {
-        // Check if Scanner directory exists
-        const exists = await RNFS.exists(downloadsPath);
-        
-        if (!exists) {
-          // Create Scanner directory if it doesn't exist
-          await RNFS.mkdir(downloadsPath);
-          console.log(`Created directory: ${downloadsPath}`);
-        }
-      } catch (dirError) {
-        console.error('Error checking/creating directory:', dirError);
-        // Continue anyway as we'll attempt the file operation
+      const filePath = `${downloadsPath}/${fileName}`;
+
+      // Check if directory exists, if not create it
+      const dirExists = await RNFS.exists(downloadsPath);
+      if (!dirExists) {
+        await RNFS.mkdir(downloadsPath);
       }
-      
-      // Set the correct font path - Android assets are directly accessible with this path format
-      const fontPath = 'fonts/Mangal.ttf';
+
+      // Copy font from assets to a temporary location
       const fontDest = `${RNFS.CachesDirectoryPath}/Mangal.ttf`;
-      
       try {
-        // Use correct method to copy from assets folder
-        await RNFS.copyFileAssets(fontPath, fontDest);
-        console.log(`Font copied to: ${fontDest}`);
+        await RNFS.copyFileAssets('fonts/Mangal.ttf', fontDest);
+        console.log('Font copied successfully');
       } catch (fontError) {
-        console.error('Error copying font file:', fontError, 'Path tried:', fontPath);
+        console.error('Error copying font:', fontError);
         // Try alternate path
         try {
-          const alternatePath = 'Mangal.ttf';
-          await RNFS.copyFileAssets(alternatePath, fontDest);
-          console.log(`Font copied using alternate path: ${alternatePath}`);
-        } catch (altError) {
-          console.error('Also failed with alternate path:', altError);
+          await RNFS.copyFileAssets('Mangal.ttf', fontDest);
+          console.log('Font copied successfully with alternate path');
+        } catch (altFontError) {
+          console.error('Error copying font with alternate path:', altFontError);
         }
       }
-      
-      // Check if the font was actually copied
+
+      // Verify if font exists
       const fontExists = await RNFS.exists(fontDest);
-      console.log('Font file exists at destination:', fontExists);
-      
-      // Create a PDF from the extracted text
-      const timestamp = Date.now();
-      const fileName = `Hindi_Extracted_Text_${timestamp}`;
-      
-      // Create HTML content for PDF with Mangal font - using data URI approach for better compatibility
+      console.log('Font exists at destination:', fontExists);
+
       const htmlContent = `
-        <!DOCTYPE html>
         <html>
           <head>
-            <meta charset="utf-8">
-            <title>हिंदी निकाला गया पाठ</title>
+            <meta charset="UTF-8">
             <style>
               @font-face {
                 font-family: 'Mangal';
-                src: url('file://${fontDest}');
-                font-weight: normal;
-                font-style: normal;
+                src: url('data:font/ttf;base64,${await RNFS.readFile(fontDest, 'base64')}') format('truetype');
               }
-              
-              body { 
-                font-family: 'Mangal', Arial, sans-serif; 
-                margin: 20px; 
-              }
-              h1 { 
-                color: #333; 
-                font-size: 24px; 
+              body {
                 font-family: 'Mangal', Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+                margin: 40px;
+                text-align: justify;
               }
-              p { 
-                line-height: 1.5; 
-                font-size: 14px; 
-                font-family: 'Mangal', Arial, sans-serif;
+              .content {
+                text-align: center;
+                margin-bottom: 20px;
               }
-              .timestamp { 
-                color: #666; 
-                font-size: 12px; 
-                margin-top: 20px; 
-                font-family: Arial, sans-serif;
+              .text {
+                text-align: justify;
+                margin-top: 20px;
               }
             </style>
           </head>
           <body>
-            <h1>हिंदी निकाला गया पाठ</h1>
-            <p>${extractedText.replace(/\n/g, '<br/>')}</p>
-            <p class="timestamp">उत्पन्न: ${new Date().toLocaleString('hi-IN')}</p>
+            <div class="content">
+              <div class="text">${extractedText}</div>
+            </div>
           </body>
         </html>
       `;
-      
-      // Step 1: Generate PDF file in the app's private directory
+
       const options = {
         html: htmlContent,
         fileName: fileName,
-        // Don't specify directory to use default app directory
-        width: 595, // A4 width in points
-        height: 842, // A4 height in points
-        base64: false,
-        fonts: [fontDest] // Add the font explicitly to the options
+        directory: 'Documents',
+        fonts: [fontDest],
       };
-      
-      const pdf = await RNHTMLtoPDF.convert(options);
-      
-      if (pdf && pdf.filePath) {
-        console.log(`Temporary Hindi PDF created at: ${pdf.filePath}`);
-        
-        // Step 2: Copy the file to the external non-scoped location
-        const targetPath = `${downloadsPath}/${fileName}.pdf`;
-        
-        // Copy the file from app directory to external directory
-        await RNFS.copyFile(pdf.filePath, targetPath);
-        console.log(`Hindi PDF copied to external location: ${targetPath}`);
-        
-        // Optional: Delete the temporary file to clean up
-        await RNFS.unlink(pdf.filePath).catch(e => 
-          console.log('Error deleting temporary file:', e)
-        );
-        
-        // Optionally delete the temporary font file
-        await RNFS.unlink(fontDest).catch(e => 
-          console.log('Error deleting temporary font file:', e)
-        );
-        
-        // Show success message with the external path
-        Alert.alert(
-          'हिंदी PDF निर्यात',
-          `PDF यहां सहेजा गया है:\n${targetPath}`,
-          [{ text: 'ठीक है' }]
-        );
-      } else {
-        throw new Error('Failed to generate Hindi PDF');
-      }
+
+      const file = await RNHTMLtoPDF.convert(options);
+      await RNFS.moveFile(file.filePath, filePath);
+      Alert.alert('Success', `PDF saved to Scanner/${fileName}`);
     } catch (error) {
-      console.error('Error exporting Hindi PDF:', error);
-      Alert.alert('त्रुटि', 'PDF निर्यात करने में विफल. कृपया स्टोरेज अनुमतियां जांचें और पुनः प्रयास करें.');
+      console.error('Error exporting PDF:', error);
+      Alert.alert('Error', 'Failed to export PDF');
     } finally {
       setIsExportingHindi(false);
     }

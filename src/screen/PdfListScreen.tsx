@@ -6,6 +6,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App'; // Import type from App
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
+import FileViewer from 'react-native-file-viewer';
+import Share from 'react-native-share';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'PdfList'>;
 
@@ -14,17 +17,68 @@ interface FileItem {
   path: string;
   uri: string;
   isDirectory: boolean;
+  tempPath?: string; // Add tempPath to store cached file location
 }
 
 const PdfListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingFileUri, setLoadingFileUri] = useState<string | null>(null);
+  const [hasStoragePermission, setHasStoragePermission] = useState<boolean>(true);
 
   // Automatically list PDFs from Downloads/Scanner when the screen loads
   useEffect(() => {
-    listPdfs();
+    // Add a small delay to ensure Activity is attached
+    const timer = setTimeout(() => {
+      listPdfs();
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, []);
+
+  // Check permissions on component mount
+  useEffect(() => {
+    checkPermissions();
+  }, []);
+
+  const checkPermissions = async () => {
+    if (Platform.OS !== 'android') return;
+    
+    // Skip permission check for Android 10+ (API 29+)
+    if (Platform.Version >= 29) {
+      setHasStoragePermission(true);
+      return;
+    }
+
+    try {
+      const result = await check(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+      if (result === RESULTS.GRANTED) {
+        setHasStoragePermission(true);
+        return;
+      }
+
+      const requestResult = await request(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+      setHasStoragePermission(requestResult === RESULTS.GRANTED);
+      
+      if (requestResult !== RESULTS.GRANTED) {
+        Alert.alert(
+          'Permission Required',
+          'Storage permission is required to access PDFs on this device. Please grant it in Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => Linking.openSettings(),
+            },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      setHasStoragePermission(false);
+    }
+  };
 
   // Function to list PDFs in Downloads/Scanner
   const listPdfs = async () => {
@@ -77,112 +131,163 @@ const PdfListScreen: React.FC = () => {
     }
   };
 
-  // Open PDF file in file manager first
+  // Function to prepare file for viewing
+  const prepareFileForViewing = async (item: FileItem): Promise<string> => {
+    if (item.tempPath && await RNFS.exists(item.tempPath)) {
+      return item.tempPath;
+    }
+
+    const tempPath = `${RNFS.TemporaryDirectoryPath}/${Date.now()}_${item.name}`;
+    const fileData = await ScopedStorage.readFile(item.uri, 'base64');
+    await RNFS.writeFile(tempPath, fileData, 'base64');
+    
+    // Update the file item with tempPath
+    setFiles(prevFiles => 
+      prevFiles.map(file => 
+        file.uri === item.uri ? { ...file, tempPath } : file
+      )
+    );
+    
+    return tempPath;
+  };
+
   const handleOpenPDF = async (item: FileItem) => {
-    try {
-      console.log("Opening file in file manager:", item.uri, item.name);
-      
-      if (!item.uri) {
-        Alert.alert('Error', 'Invalid file URI');
-        return;
-      }
-      
-      // Show loading indicator
-      setIsLoading(true);
-      
-      if (Platform.OS === 'android') {
-        try {
-          // Use intent action to view document with category browsable
-          // This will typically open in a file manager or file browser rather than directly in a viewer
-          
-          // First, attempt to extract the document ID from the content URI
-          const documentId = item.uri.split('/document/')[1];
-          if (documentId) {
-            // Create a special URI that tries to open the folder containing this document
-            // Add parameters to encourage browsing rather than direct opening
-            const browseUri = `${item.uri}?mode=browse&intent=true`;
-            console.log("Attempting to browse with URI:", browseUri);
-            
-            const supported = await Linking.canOpenURL(browseUri);
-            if (supported) {
-              await Linking.openURL(browseUri);
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch (folderError) {
-          console.error("Error with browse intent:", folderError);
-        }
-        
-        // Alternative: try to use a generic file manager intent
-        try {
-          const fileManagerUri = "content://com.android.externalstorage.documents/root/primary";
-          console.log("Trying generic file manager:", fileManagerUri);
-          
-          const supported = await Linking.canOpenURL(fileManagerUri);
-          if (supported) {
-            await Linking.openURL(fileManagerUri);
-            setIsLoading(false);
-            return;
-          }
-        } catch (genericError) {
-          console.error("Error opening generic file manager:", genericError);
-        }
-      }
-      
-      // Fallback: open the file directly
-      console.log("Falling back to opening file directly");
-      const supported = await Linking.canOpenURL(item.uri);
-      
-      if (!supported) {
-        Alert.alert(
-          'Cannot Open File',
-          'No app available to open this file. Please install a file manager or PDF viewer app.',
-          [{ text: 'OK' }]
-        );
-        setIsLoading(false);
-        return;
-      }
-      
-      // Open the content URI with default handler
-      await Linking.openURL(item.uri);
-      
-    } catch (error) {
-      console.error('Error opening file:', error);
+    if (!hasStoragePermission && Platform.OS === 'android' && Platform.Version < 29) {
       Alert.alert(
-        'Cannot Open File',
-        'Could not open this file. Please try again later.',
+        'Permission Required',
+        'Storage permission is required to open PDFs. Please grant it in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
+    try {
+      setLoadingFileUri(item.uri);
+      const filePath = await prepareFileForViewing(item);
+
+      try {
+        await FileViewer.open(filePath);
+        console.log('PDF opened successfully with FileViewer');
+      } catch (viewerError) {
+        console.log('FileViewer failed, trying alternative methods:', viewerError);
+        
+        // Try to open with system PDF viewer
+        const supported = await Linking.canOpenURL(item.uri);
+        if (!supported) {
+          Alert.alert(
+            'No PDF Viewer',
+            'Please install a PDF viewer app (e.g., Google PDF Viewer) to open this file.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        await Linking.openURL(item.uri);
+      }
+    } catch (error) {
+      console.error('Error opening PDF:', error);
+      Alert.alert(
+        'Error',
+        'Could not open the PDF. Please try again or install a PDF viewer app.',
         [{ text: 'OK' }]
       );
     } finally {
-      setIsLoading(false);
+      setLoadingFileUri(null);
     }
   };
 
-  // Delete PDF file
+  const handleSharePDF = async (item: FileItem) => {
+    if (!hasStoragePermission && Platform.OS === 'android' && Platform.Version < 29) {
+      Alert.alert(
+        'Permission Required',
+        'Storage permission is required to share PDFs. Please grant it in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
+    try {
+      setLoadingFileUri(item.uri);
+      const filePath = await prepareFileForViewing(item);
+
+      const shareOptions = {
+        title: `Share ${item.name}`,
+        url: `file://${filePath}`,
+        type: 'application/pdf',
+      };
+
+      await Share.open(shareOptions);
+      console.log('PDF shared successfully');
+    } catch (error: any) {
+      console.error('Error sharing PDF:', error);
+      if (error.message?.includes('User did not share')) {
+        // User cancelled sharing, no need to show error
+        return;
+      }
+      Alert.alert(
+        'Error',
+        'Could not share the PDF. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoadingFileUri(null);
+    }
+  };
+
   const handleDeletePDF = async (item: FileItem) => {
+    if (!hasStoragePermission && Platform.OS === 'android' && Platform.Version < 29) {
+      Alert.alert(
+        'Permission Required',
+        'Storage permission is required to delete PDFs. Please grant it in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       'Delete PDF',
       `Are you sure you want to delete "${item.name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
+              setLoadingFileUri(item.uri);
               await ScopedStorage.deleteFile(item.uri);
-              // Update the list after deletion
-              setFiles(prevFiles => 
-                prevFiles.filter(file => file.uri !== item.uri)
-              );
+              
+              // Clean up temporary file if it exists
+              if (item.tempPath) {
+                try {
+                  await RNFS.unlink(item.tempPath);
+                } catch (unlinkError) {
+                  console.error('Error cleaning up temp file:', unlinkError);
+                }
+              }
+              
+              setFiles(prevFiles => prevFiles.filter(file => file.uri !== item.uri));
               Alert.alert('Success', 'File deleted successfully');
             } catch (error) {
               console.error('Error deleting file:', error);
-              Alert.alert('Error', 'Failed to delete file');
+              Alert.alert(
+                'Error',
+                'Failed to delete the file. Please try again.',
+                [{ text: 'OK' }]
+              );
+            } finally {
+              setLoadingFileUri(null);
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -198,13 +303,27 @@ const PdfListScreen: React.FC = () => {
         <TouchableOpacity 
           style={[styles.button, styles.openButton]} 
           onPress={() => handleOpenPDF(item)}
+          disabled={loadingFileUri === item.uri}
         >
           <MaterialIcons name="visibility" size={20} color="#fff" />
-          <Text style={styles.buttonText}>Open</Text>
+          <Text style={styles.buttonText}>
+            {loadingFileUri === item.uri ? 'Opening...' : 'Open'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.button, styles.shareButton]} 
+          onPress={() => handleSharePDF(item)}
+          disabled={loadingFileUri === item.uri}
+        >
+          <MaterialIcons name="share" size={20} color="#fff" />
+          <Text style={styles.buttonText}>
+            {loadingFileUri === item.uri ? 'Sharing...' : 'Share'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.button, styles.deleteButton]} 
           onPress={() => handleDeletePDF(item)}
+          disabled={loadingFileUri === item.uri}
         >
           <MaterialIcons name="delete" size={20} color="#fff" />
           <Text style={styles.buttonText}>Delete</Text>
@@ -268,6 +387,9 @@ const styles = StyleSheet.create({
   },
   openButton: {
     backgroundColor: '#4285F4'
+  },
+  shareButton: {
+    backgroundColor: '#333'
   },
   deleteButton: {
     backgroundColor: '#F44336'

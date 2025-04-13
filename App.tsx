@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ChooseImgScreen from './src/screen/ChooseImgScreen'; // Import ChooseImgScreen
 import PdfListScreen from './src/screen/PdfListScreen';     // Import PdfListScreen
 import ExtractedTextScreen from './src/screen/ExtractedTextScreen'; // Import ExtractedTextScreen
+import CustomSplashScreen from './src/screen/SplashScreen';
 import { check, request, PERMISSIONS, RESULTS, openSettings } from 'react-native-permissions';
 import SplashScreen from 'react-native-splash-screen';
 
@@ -20,17 +21,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const App: React.FC = () => {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    // Hide splash screen if it's showing
-    try {
-      SplashScreen.hide();
-    } catch (e) {
-      console.log('Error hiding splash screen:', e);
-    }
-    
-    // Request permissions immediately on component mount
-    requestPermissions();
+    // Request permissions after splash screen
+    const permissionTimer = setTimeout(() => {
+      requestPermissions();
+    }, 3000); // Wait for splash screen to finish
+
+    return () => clearTimeout(permissionTimer);
   }, []);
 
   const requestPermissions = async () => {
@@ -70,6 +69,7 @@ const App: React.FC = () => {
       showPermissionAlert();
     } finally {
       setLoading(false);
+      setShowSplash(false);
     }
   };
 
@@ -90,6 +90,10 @@ const App: React.FC = () => {
     );
   };
 
+  if (showSplash) {
+    return <CustomSplashScreen />;
+  }
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -102,9 +106,45 @@ const App: React.FC = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="ChooseImg">
-        <Stack.Screen name="ChooseImg" component={ChooseImgScreen} options={{ title: 'Choose Image' }} />
-        <Stack.Screen name="PdfList" component={PdfListScreen} options={{ title: 'PDF List' }} />
-        <Stack.Screen name="ExtractedText" component={ExtractedTextScreen} options={{ title: 'Extracted Text' }} />
+        <Stack.Screen 
+          name="ChooseImg" 
+          component={ChooseImgScreen} 
+          options={{ 
+            title: 'MANGAL SCANNER',
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 20,
+              color: '#4285F4'
+            }
+          }} 
+        />
+        <Stack.Screen 
+          name="PdfList" 
+          component={PdfListScreen} 
+          options={{ 
+            title: 'PDF LIST',
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 20,
+              color: '#4285F4'
+            }
+          }} 
+        />
+        <Stack.Screen 
+          name="ExtractedText" 
+          component={ExtractedTextScreen} 
+          options={{ 
+            title: 'EXTRACTED TEXT',
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 20,
+              color: '#4285F4'
+            }
+          }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -120,8 +160,8 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#333',
-  }
+    color: '#4285F4',
+  },
 });
 
 export default App;

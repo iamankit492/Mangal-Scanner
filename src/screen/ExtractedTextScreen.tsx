@@ -240,6 +240,37 @@ const ExtractedTextScreen: React.FC = () => {
     showFileNamePrompt(true);
   };
 
+  // Navigate to SimpleTextEditor screen
+  const goToSimpleTextEditor = () => {
+    if (!extractedText) {
+      Alert.alert('Error', 'No text available to edit');
+      return;
+    }
+    
+    try {
+      console.log('Attempting to navigate to SimpleTextEditor with text:', extractedText.substring(0, 50) + '...');
+      navigation.navigate('SimpleTextEditor', {
+        initialText: extractedText || ''
+      });
+      console.log('Navigation to SimpleTextEditor completed');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Error', 'Failed to open text editor: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  // Navigate to TestRichEditor screen
+  const goToTestRichEditor = () => {
+    try {
+      console.log('Attempting to navigate to TestRichEditor');
+      navigation.navigate('TestRichEditor');
+      console.log('Navigation to TestRichEditor completed');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Error', 'Failed to open test rich editor: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Top Navigation Bar with PDF List Button */}
@@ -255,10 +286,8 @@ const ExtractedTextScreen: React.FC = () => {
       </View>
 
       <View style={styles.container}>
-        <Text style={styles.header}>Extracted Text</Text>
-        
         {/* Scrollable Text Box */}
-        <ScrollView style={styles.textContainer}>
+        <ScrollView style={[styles.textContainer, { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10 }]}>
           {extractedText ? (
             <Text style={styles.text}>{extractedText}</Text>
           ) : (
@@ -266,38 +295,15 @@ const ExtractedTextScreen: React.FC = () => {
           )}
         </ScrollView>
 
-        {/* Export Buttons */}
-        <View style={styles.exportButtonsContainer}>
-          <TouchableOpacity
-            style={[styles.exportButton, { backgroundColor: '#4285F4' }]}
-            onPress={handleExportEnglish}
-            disabled={isExportingEnglish || isExportingHindi || !extractedText}
-          >
-            {isExportingEnglish ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <MaterialIcons name="translate" size={20} color="#fff" />
-                <Text style={styles.exportButtonText}>Export English</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.exportButton, { backgroundColor: '#FF9800' }]}
-            onPress={handleExportHindi}
-            disabled={isExportingEnglish || isExportingHindi || !extractedText}
-          >
-            {isExportingHindi ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <MaterialIcons name="language" size={20} color="#fff" />
-                <Text style={styles.exportButtonText}>Export Hindi</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Edit Button - Centered */}
+        <TouchableOpacity
+          style={[styles.editButton, { backgroundColor: '#2196F3', marginTop: 10, alignSelf: 'center' }]}
+          onPress={goToSimpleTextEditor}
+          disabled={!extractedText}
+        >
+          <MaterialIcons name="edit-note" size={20} color="#fff" />
+          <Text style={styles.editButtonText}>Edit</Text>
+        </TouchableOpacity>
 
         {/* File Name Input Modal */}
         <Modal
@@ -450,6 +456,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  editButtonText: {
+    color: '#fff',
+    marginLeft: 8,
+    fontSize: 16,
   },
 });
 

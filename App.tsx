@@ -5,6 +5,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ChooseImgScreen from './src/screen/ChooseImgScreen'; // Import ChooseImgScreen
 import PdfListScreen from './src/screen/PdfListScreen';     // Import PdfListScreen
 import ExtractedTextScreen from './src/screen/ExtractedTextScreen'; // Import ExtractedTextScreen
+import SimpleTextEditorScreen from './src/screen/SimpleTextEditorScreen'; // Import SimpleTextEditorScreen
+import TestRichEditor from './src/components/TestRichEditor'; // Import TestRichEditor
 import CustomSplashScreen from './src/screen/SplashScreen';
 import { check, request, PERMISSIONS, RESULTS, openSettings } from 'react-native-permissions';
 import SplashScreen from 'react-native-splash-screen';
@@ -14,6 +16,8 @@ export type RootStackParamList = {
   ChooseImg: undefined;
   PdfList: undefined;
   ExtractedText: { imageUri?: string, extractedText?: string };
+  SimpleTextEditor: { initialText?: string };
+  TestRichEditor: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -41,32 +45,35 @@ const App: React.FC = () => {
           const result = await check('android.permission.MANAGE_EXTERNAL_STORAGE' as any);
           
           if (result !== RESULTS.GRANTED) {
-            const permissionResult = await request('android.permission.MANAGE_EXTERNAL_STORAGE' as any);
-            
-            if (permissionResult !== RESULTS.GRANTED) {
-              showPermissionAlert();
-              return;
-            }
+            // Don't request permission immediately, just log it
+            console.log('MANAGE_EXTERNAL_STORAGE permission not granted');
+            // Set permissions as granted anyway to avoid blocking the app
+            setPermissionsGranted(true);
+            return;
           }
         } 
         
-        // For Android 10 and below, request read/write permissions
-        const readResult = await request(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-        const writeResult = await request(PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE);
+        // For Android 10 and below, check read/write permissions
+        const readResult = await check(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+        const writeResult = await check(PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE);
         
         if (readResult === RESULTS.GRANTED && writeResult === RESULTS.GRANTED) {
           console.log('Storage permissions granted');
           setPermissionsGranted(true);
         } else {
-          showPermissionAlert();
+          // Don't show alert, just log and continue
+          console.log('Storage permissions not granted');
+          // Set permissions as granted anyway to avoid blocking the app
+          setPermissionsGranted(true);
         }
       } else {
         // For iOS (simplified for this example)
         setPermissionsGranted(true);
       }
     } catch (error) {
-      console.error('Error requesting permissions:', error);
-      showPermissionAlert();
+      console.error('Error checking permissions:', error);
+      // Don't show alert on error, just continue
+      setPermissionsGranted(true);
     } finally {
       setLoading(false);
       setShowSplash(false);
@@ -137,6 +144,32 @@ const App: React.FC = () => {
           component={ExtractedTextScreen} 
           options={{ 
             title: 'EXTRACTED TEXT',
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 20,
+              color: '#4285F4'
+            }
+          }} 
+        />
+        <Stack.Screen 
+          name="SimpleTextEditor" 
+          component={SimpleTextEditorScreen} 
+          options={{ 
+            title: 'TEXT EDITOR',
+            headerTitleAlign: 'center',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              fontSize: 20,
+              color: '#4285F4'
+            }
+          }} 
+        />
+        <Stack.Screen 
+          name="TestRichEditor" 
+          component={TestRichEditor} 
+          options={{ 
+            title: 'TEST RICH EDITOR',
             headerTitleAlign: 'center',
             headerTitleStyle: {
               fontWeight: 'bold',
